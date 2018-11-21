@@ -12,6 +12,8 @@ import com.jwt.enums.RoleConstants;
 /**
  * Utility class for Spring Security.
  */
+
+//TODO gereksiz class olabilir kontrol et
 public final class SecurityUtils {
 
     private SecurityUtils() {

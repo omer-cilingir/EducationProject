@@ -1,11 +1,11 @@
 package com.jwt.config;
 
+import com.jwt.enums.RoleConstants;
+import com.jwt.security.jwt.JwtAuthenticationFilter;
+import com.jwt.security.jwt.TokenProvider;
 import java.util.Arrays;
-
-import javax.annotation.PostConstruct;
-
+import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.BeanInitializationException;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.access.vote.RoleVoter;
@@ -25,101 +25,88 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 
-import com.jwt.enums.RoleConstants;
-import com.jwt.security.jwt.JWTConfigurer;
-import com.jwt.security.jwt.TokenProvider;
-
 @Configuration
 @EnableWebSecurity
 @EnableGlobalMethodSecurity(prePostEnabled = true, securedEnabled = true)
+@RequiredArgsConstructor
 public class SecurityConfiguration extends WebSecurityConfigurerAdapter {
 
-    private final AuthenticationManagerBuilder authenticationManagerBuilder;
+  private final UserDetailsService userDetailsService;
+  private final TokenProvider tokenProvider;
 
-    private final UserDetailsService userDetailsService;
+  @Bean
+  public AuthenticationManager authenticationManagerBean() throws Exception {
+    return super.authenticationManagerBean();
+  }
 
-    private final TokenProvider tokenProvider;
+  @Bean
+  public JwtAuthenticationFilter jwtAuthenticationFilter() {
+    return new JwtAuthenticationFilter();
+  }
 
-    public SecurityConfiguration(AuthenticationManagerBuilder authenticationManagerBuilder, UserDetailsService userDetailsService, TokenProvider tokenProvider) {
-        this.authenticationManagerBuilder = authenticationManagerBuilder;
-        this.userDetailsService = userDetailsService;
-        this.tokenProvider = tokenProvider;
-    }
 
-    @PostConstruct
-    public void init() {
-        try {
-            authenticationManagerBuilder
-                .userDetailsService(userDetailsService)
-                .passwordEncoder(passwordEncoder());
-        } catch (Exception e) {
-            throw new BeanInitializationException("Security configuration failed", e);
-        }
-    }
-    
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
+  @Bean
+  public PasswordEncoder passwordEncoder() {
+    return new BCryptPasswordEncoder();
+  }
 
-    @Override
-    protected void configure(HttpSecurity http) throws Exception {
-        http
-            .addFilterBefore(corsFilter(), UsernamePasswordAuthenticationFilter.class)
-            .exceptionHandling()
+  //TODO roleVoter ne için
+  @Bean
+  RoleVoter roleVoter() {
+    RoleVoter roleVoter = new RoleVoter();
+    roleVoter.setRolePrefix(StringUtils.EMPTY);
+    return roleVoter;
+  }
+
+  @Bean
+  CorsFilter corsFilter() {
+    return new CorsFilter(corsConfigurationSource());
+  }
+
+  @Bean
+  CorsConfigurationSource corsConfigurationSource() {
+    CorsConfiguration configuration = new CorsConfiguration();
+    configuration.setAllowedOrigins(Arrays.asList("*"));
+    configuration.setAllowedMethods(Arrays.asList("*"));
+    configuration.setAllowedHeaders(Arrays.asList("*"));
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/**", configuration);
+    return source;
+  }
+
+  @Override
+  public void configure(AuthenticationManagerBuilder authenticationManagerBuilder) throws Exception {
+    authenticationManagerBuilder
+        .userDetailsService(userDetailsService)
+        .passwordEncoder(passwordEncoder());
+  }
+
+  @Override
+  protected void configure(HttpSecurity http) throws Exception {
+    http
+        .addFilterBefore(corsFilter(), UsernamePasswordAuthenticationFilter.class)
+        .exceptionHandling()
         .and()
-            .csrf()
-            .disable()
-            .headers()
-            .frameOptions()
-            .disable()
+        .csrf()
+        .disable()
+        .headers()
+        .frameOptions()
+        .disable()
         .and()
-        	.cors()
-        	.configurationSource(corsConfigurationSource())
+        .cors()
+        .configurationSource(corsConfigurationSource())
         .and()
-            .sessionManagement()
-            .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+        .sessionManagement()
+        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
         .and()
-            .authorizeRequests()
-            .antMatchers("/api/register").permitAll()
-            .antMatchers("/api/role/all").permitAll()
-            .antMatchers("/api/role/add").hasAuthority(RoleConstants.ADMIN.toString())
-            .antMatchers("/api/allUsers").permitAll()
-        .and()
-            .apply(securityConfigurerAdapter());
+        .authorizeRequests()
+        .antMatchers("/api/register").permitAll()
+        .antMatchers("/api/role/all").permitAll()
+        .antMatchers("/api/role/add").hasAuthority(RoleConstants.ADMIN.toString())
+        .antMatchers("/api/allUsers").hasAuthority(RoleConstants.ADMIN.toString()); // Test için sonra düzelt
 
-    }
+    http.addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
 
-    private JWTConfigurer securityConfigurerAdapter() {
-        return new JWTConfigurer(tokenProvider);
-    }
-    
-    @Bean
-    RoleVoter roleVoter() {
-    	RoleVoter roleVoter = new RoleVoter();
-    	roleVoter.setRolePrefix(StringUtils.EMPTY);
-    	return roleVoter;
-    }
-    
-    @Bean
-    CorsFilter corsFilter() {
-    	return new CorsFilter(corsConfigurationSource());
-    }
-    
-    @Bean
-    public AuthenticationManager authenticationManagerBean() throws Exception {
-        return super.authenticationManagerBean();
-    }
-    
-    @Bean
-	CorsConfigurationSource corsConfigurationSource() {
-		CorsConfiguration configuration = new CorsConfiguration();
-		configuration.setAllowedOrigins(Arrays.asList("*"));
-		configuration.setAllowedMethods(Arrays.asList("*"));
-		configuration.setAllowedHeaders(Arrays.asList("*"));
-		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-		source.registerCorsConfiguration("/**", configuration);
-		return source;
-	}
-    
+  }
+
 }
